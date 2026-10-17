@@ -97,6 +97,45 @@
       font-size: 0.95rem;
     }
 
+    .summary {
+      display: flex;
+      gap: 8px;
+      margin-top: 12px;
+      flex-wrap: wrap;
+    }
+
+    .summary-tile {
+      flex: 1 1 140px;
+      padding: 12px 10px;
+      border-radius: 8px;
+      text-align: center;
+    }
+
+    .tile-total {
+      background: #e8f5e9;
+    }
+
+    .tile-overtime {
+      background: #fff3e0;
+    }
+
+    .summary-label {
+      font-size: 0.8rem;
+      color: #555;
+      margin-bottom: 4px;
+    }
+
+    .summary-value {
+      font-size: 1.15rem;
+      font-weight: 700;
+    }
+
+    .summary-note {
+      font-size: 0.75rem;
+      color: #777;
+      margin-top: 4px;
+    }
+
     .error {
       margin-top: 8px;
       padding: 8px;
@@ -220,6 +259,19 @@
     <button id="calculateBtn">Посчитать</button>
 
     <div id="error" class="error" style="display: none;"></div>
+
+    <div id="summary" class="summary" style="display: none;">
+      <div class="summary-tile tile-total">
+        <div class="summary-label">Всего за день</div>
+        <div class="summary-value" id="summaryTotal"></div>
+      </div>
+      <div class="summary-tile tile-overtime">
+        <div class="summary-label">Из них сверхурочные</div>
+        <div class="summary-value" id="summaryOvertime"></div>
+        <div class="summary-note" id="summaryOvertimeNote"></div>
+      </div>
+    </div>
+
     <div id="result" class="result" style="display: none;"></div>
   </div>
   <div id="popupOverlay" class="popup-overlay">
@@ -270,6 +322,10 @@
 
 
 
+    // Первые 8:36 — обычная ставка, следующие 2 часа — +25%, дальше — +50%
+    const REGULAR_MINUTES = 8 * 60 + 36;
+    const OVERTIME_125_MINUTES = 2 * 60;
+
     function calculateDailySalary() {
       const startHours = Number(document.getElementById("startHours").value);
       const startMinutes = Number(document.getElementById("startMinutes").value);
@@ -280,8 +336,10 @@
 
       const errorDiv = document.getElementById("error");
       const resultDiv = document.getElementById("result");
+      const summaryDiv = document.getElementById("summary");
       errorDiv.style.display = "none";
       resultDiv.style.display = "none";
+      summaryDiv.style.display = "none";
 
       if (
         isNaN(startHours) || isNaN(startMinutes) ||
@@ -311,15 +369,61 @@
       }
 
       const workedHours = workedMinutes / 60;
-      const dailySalary = workedHours * hourlySalary;
+
+      const regularMinutes = Math.min(workedMinutes, REGULAR_MINUTES);
+      const overtime125Minutes = Math.min(
+        Math.max(workedMinutes - REGULAR_MINUTES, 0),
+        OVERTIME_125_MINUTES
+      );
+      const overtime150Minutes = Math.max(
+        workedMinutes - REGULAR_MINUTES - OVERTIME_125_MINUTES,
+        0
+      );
+
+      const regularPay = (regularMinutes / 60) * hourlySalary;
+      const overtime125Pay = (overtime125Minutes / 60) * hourlySalary * 1.25;
+      const overtime150Pay = (overtime150Minutes / 60) * hourlySalary * 1.5;
+      const dailySalary = regularPay + overtime125Pay + overtime150Pay;
+
+      let breakdown =
+        "Обычные часы (" + (regularMinutes / 60).toFixed(2) + " h): <strong>" +
+        regularPay.toFixed(2) + "</strong><br>";
+
+      if (overtime125Minutes > 0) {
+        breakdown +=
+          "Сверхурочные +25% (" + (overtime125Minutes / 60).toFixed(2) + " h): <strong>" +
+          overtime125Pay.toFixed(2) + "</strong><br>";
+      }
+
+      if (overtime150Minutes > 0) {
+        breakdown +=
+          "Сверхурочные +50% (" + (overtime150Minutes / 60).toFixed(2) + " h): <strong>" +
+          overtime150Pay.toFixed(2) + "</strong><br>";
+      }
 
       resultDiv.innerHTML =
         "Количество рабочих часов  (минус перерыв): <strong>" + workedHours.toFixed(2) + " h</strong><br>" +
+        breakdown +
         "Зарплата за день: <strong>" + dailySalary.toFixed(2) + "</strong>";
       resultDiv.style.display = "block";
 
+      const overtimeMinutes = overtime125Minutes + overtime150Minutes;
+      const overtimePay = overtime125Pay + overtime150Pay;
+      // Доплата — то, что сверхурочные дали сверх обычной ставки
+      const overtimeBonus =
+        (overtime125Minutes / 60) * hourlySalary * 0.25 +
+        (overtime150Minutes / 60) * hourlySalary * 0.5;
 
-        if (dailySalary > 360) {
+      document.getElementById("summaryTotal").textContent = dailySalary.toFixed(2);
+      document.getElementById("summaryOvertime").textContent = overtimePay.toFixed(2);
+      document.getElementById("summaryOvertimeNote").textContent =
+        overtimeMinutes > 0
+          ? (overtimeMinutes / 60).toFixed(2) + " h · доплата " + overtimeBonus.toFixed(2)
+          : "сверхурочных нет";
+      summaryDiv.style.display = "flex";
+
+
+        if (dailySalary > 400) {
         showPopup(
           "Вау, жестко поработала!! 💰",
           "Твоя зарплата сегодня  " + dailySalary.toFixed(2) + " шекелей!!",
